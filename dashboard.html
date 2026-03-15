@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GrabOn Underwriting Agent</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#0B0E11;font-family:'DM Sans',system-ui,sans-serif}
+    ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#0B0E11}::-webkit-scrollbar-thumb{background:#1E2738;border-radius:3px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useCallback}=React;
+const API="http://localhost:8000/api";
+const C={bg:"#0B0E11",sf:"#141820",bdr:"#1E2738",bdrA:"#2A3A55",txt:"#E8ECF1",mut:"#7A8BA0",dim:"#4A5568",acc:"#3B82F6",t1:"#10B981",t1b:"rgba(16,185,129,0.08)",t2:"#F59E0B",t2b:"rgba(245,158,11,0.08)",t3:"#EF4444",t3b:"rgba(239,68,68,0.08)",rej:"#6B7280",rejb:"rgba(107,114,128,0.08)",cred:"#8B5CF6",ins:"#06B6D4",ok:"#10B981",warn:"#F59E0B",bad:"#EF4444"};
+const tc=t=>t==="Tier 1"?C.t1:t==="Tier 2"?C.t2:t==="Tier 3"?C.t3:C.rej;
+const tb=t=>t==="Tier 1"?C.t1b:t==="Tier 2"?C.t2b:t==="Tier 3"?C.t3b:C.rejb;
+const sc=s=>s==="Pre-Approved"?C.ok:s==="Manual Review Required"?C.warn:s==="Rejected"?C.bad:(s==="Accepted"||s==="NACH Mandate Initiated")?C.acc:C.mut;
+const mono="'JetBrains Mono','Consolas',monospace";
+const crd={background:C.sf,border:`1px solid ${C.bdr}`,borderRadius:12,padding:20};
+
+async function apiFetch(path,opts={}){
+  const r=await fetch(`${API}${path}`,{headers:{"Content-Type":"application/json"},...opts});
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.detail||`HTTP ${r.status}`);}
+  return r.json();
+}
+
+function Badge({children,color,bg}){return <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:6,fontSize:11,fontWeight:600,letterSpacing:"0.03em",color,background:bg||`${color}15`}}>{children}</span>;}
+function TierBadge({tier}){return <Badge color={tc(tier)} bg={tb(tier)}>{tier}</Badge>;}
+function StatusBadge({status}){return status?<Badge color={sc(status)}>{status}</Badge>:<Badge color={C.dim}>Not Run</Badge>;}
+function Stat({label,value,color}){return <div style={{minWidth:90}}><div style={{fontSize:11,color:C.mut,marginBottom:4}}>{label}</div><div style={{fontSize:22,fontWeight:700,color:color||C.txt,lineHeight:1}}>{value}</div></div>;}
+function Btn({children,onClick,variant="primary",disabled,loading,small}){
+  const vs={primary:{bg:C.acc,c:"#fff",b:"none"},success:{bg:C.ok,c:"#fff",b:"none"},warning:{bg:C.warn,c:"#000",b:"none"},ghost:{bg:"transparent",c:C.mut,b:`1px solid ${C.bdr}`}};
+  const v=vs[variant]||vs.primary;
+  return <button onClick={onClick} disabled={disabled||loading} style={{padding:small?"6px 12px":"8px 18px",borderRadius:8,fontSize:small?12:13,fontWeight:600,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.4:1,background:v.bg,color:v.c,border:v.b,display:"inline-flex",alignItems:"center",gap:6,fontFamily:"'DM Sans',system-ui",transition:"opacity 0.15s"}}>
+    {loading&&<span style={{display:"inline-block",width:12,height:12,border:"2px solid currentColor",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.6s linear infinite"}}/>}{children}
+  </button>;
+}
+function ScoreBar({label,value}){const p=Math.min(100,value),color=p>=70?C.t1:p>=45?C.t2:C.t3;return <div style={{marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.mut,marginBottom:3}}><span>{label}</span><span style={{fontFamily:mono,color:C.txt}}>{value.toFixed(0)}</span></div><div style={{height:4,background:C.bdr,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${p}%`,background:color,borderRadius:2,transition:"width 0.5s"}}/></div></div>;}
+function Toast({message,type,onClose}){if(!message)return null;const colors={success:C.ok,error:C.bad,info:C.acc};useEffect(()=>{const t=setTimeout(onClose,4000);return()=>clearTimeout(t)},[message]);return <div style={{position:"fixed",bottom:24,right:24,zIndex:999,background:C.sf,border:`1px solid ${colors[type]||C.bdr}`,borderRadius:10,padding:"12px 20px",maxWidth:400,boxShadow:"0 8px 32px rgba(0,0,0,0.5)",display:"flex",alignItems:"center",gap:10,animation:"slideUp 0.25s"}}><span style={{color:colors[type],fontSize:16}}>{type==="success"?"✓":type==="error"?"✗":"ℹ"}</span><span style={{fontSize:13,color:C.txt}}>{message}</span></div>;}
+
+/* Server shape: merchant.credit / merchant.insurance = {risk_tier, weighted_score, scores, flags, offer_status, offer, rationale, key_factors, rejection_reasons} */
+function getD(m,mode){const d=mode==="GrabCredit"?m.credit:m.insurance;if(!d)return null;return{risk_score:{risk_tier:d.risk_tier,weighted_total:d.weighted_score,scores:d.scores,flags:d.flags},offer_status:d.offer_status,credit_offer:mode==="GrabCredit"?d.offer:null,insurance_offer:mode==="GrabInsurance"?d.offer:null,rationale:d.rationale,key_factors:d.key_factors,rejection_reasons:d.rejection_reasons};}
+
+function Detail({m,mode,loading,onBack,onUW,onWA,onAccept}){
+  const d=getD(m,mode);
+  const risk=d?d.risk_score:{risk_tier:m.credit?.risk_tier||"Unknown",weighted_total:m.credit?.weighted_score||0,flags:m.credit?.flags||[]};
+  const mid=m.merchant_id,gmv=m.monthly_gmv_12m||[],maxG=Math.max(...gmv,1),mos=["J","F","M","A","M","J","J","A","S","O","N","D"];
+  return <div style={{animation:"fadeIn 0.2s"}}>
+    <button onClick={onBack} style={{background:"none",border:"none",color:C.mut,cursor:"pointer",fontSize:13,marginBottom:16,padding:0}}>← All Merchants</button>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
+      <div><h1 style={{fontSize:24,fontWeight:700,marginBottom:4,color:C.txt,letterSpacing:"-0.02em"}}>{m.merchant_name}</h1>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}><span style={{fontSize:13,color:C.mut}}>{mid} · {m.category}</span><TierBadge tier={risk.risk_tier}/>{d&&<StatusBadge status={d.offer_status}/>}</div></div>
+      <div style={{display:"flex",gap:8}}>
+        <Btn onClick={onUW} loading={loading[`uw_${mid}_${mode}`]}>{d?"↻ Re-Run":"▶ Run"} {mode==="GrabCredit"?"Credit":"Insurance"}</Btn>
+        {d&&d.offer_status!=="Rejected"&&<Btn variant="success" onClick={onWA} loading={loading[`wa_${mid}`]}>📱 WhatsApp</Btn>}
+        {d&&(d.offer_status==="Pre-Approved"||d.offer_status==="Manual Review Required")&&<Btn variant="warning" onClick={onAccept} loading={loading[`accept_${mid}`]}>✓ Accept</Btn>}
+      </div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+      <div style={crd}><div style={{fontSize:12,fontWeight:600,color:C.mut,marginBottom:16}}>MONTHLY GMV (12 MONTHS)</div>
+        <div style={{display:"flex",alignItems:"flex-end",gap:4,height:120}}>{gmv.map((v,i)=><div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}><div style={{width:"100%",height:`${Math.max(4,(v/maxG)*100)}px`,background:v===0?C.bdr:`linear-gradient(180deg,${tc(risk.risk_tier)}cc,${tc(risk.risk_tier)}40)`,borderRadius:"3px 3px 0 0"}} title={`₹${v}L`}/><span style={{fontSize:8,color:C.dim,fontFamily:mono}}>{mos[i]}</span></div>)}</div></div>
+      <div style={crd}><div style={{fontSize:12,fontWeight:600,color:C.mut,marginBottom:16}}>RISK SCORE <span style={{float:"right",color:tc(risk.risk_tier),fontFamily:mono}}>{risk.weighted_total}/100</span></div>
+        {d&&d.risk_score.scores?<><ScoreBar label="GMV Stability (25%)" value={d.risk_score.scores.gmv_stability}/><ScoreBar label="Growth (20%)" value={d.risk_score.scores.growth_trajectory}/><ScoreBar label="Loyalty (20%)" value={d.risk_score.scores.customer_loyalty}/><ScoreBar label="Refund Risk (15%)" value={d.risk_score.scores.refund_risk}/><ScoreBar label="Commitment (10%)" value={d.risk_score.scores.platform_commitment}/><ScoreBar label="Data (10%)" value={d.risk_score.scores.data_sufficiency}/></>:<div style={{color:C.dim,fontSize:13,padding:"20px 0",textAlign:"center"}}>Run underwriting to see breakdown</div>}</div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+      <div style={crd}><div style={{fontSize:12,fontWeight:600,color:C.mut,marginBottom:16}}>MERCHANT PROFILE</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>{[["Avg Monthly GMV",`₹${m.avg_monthly_gmv}L`],["Total Annual GMV",`₹${m.total_gmv_12m}L`],["Growth (H2/H1)",m.gmv_growth_rate!=null?`${(m.gmv_growth_rate*100).toFixed(1)}%`:"N/A"],["Active Months",m.num_active_months],["Unique Customers",(m.unique_customers||0).toLocaleString()],["Coupon Redemption",`${((m.coupon_redemption_rate||0)*100).toFixed(0)}%`],["Customer Return",`${((m.customer_return_rate||0)*100).toFixed(0)}%`],["Refund Rate",`${((m.return_and_refund_rate||0)*100).toFixed(1)}%`],["Seasonality",(m.seasonality_index||0).toFixed(2)],["Exclusivity",`${((m.deal_exclusivity_rate||0)*100).toFixed(0)}%`]].map(([l,v],i)=><div key={i} style={{padding:"8px 0",borderBottom:`1px solid ${C.bdr}`}}><div style={{fontSize:10,color:C.dim,marginBottom:2}}>{l}</div><div style={{fontSize:13,fontFamily:mono,fontWeight:600,color:C.txt}}>{v}</div></div>)}</div></div>
+      <div style={crd}><div style={{fontSize:12,fontWeight:600,color:C.mut,marginBottom:16}}>{mode==="GrabCredit"?"💰 CREDIT OFFER":"🛡️ INSURANCE OFFER"}</div>
+        {d?<div>
+          {d.credit_offer&&mode==="GrabCredit"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div style={{padding:12,background:C.bg,borderRadius:8}}><div style={{fontSize:10,color:C.dim}}>Credit Limit</div><div style={{fontSize:22,fontWeight:700,color:C.cred}}>₹{d.credit_offer.credit_limit_lakhs}L</div></div>
+            <div style={{padding:12,background:C.bg,borderRadius:8}}><div style={{fontSize:10,color:C.dim}}>Interest Rate</div><div style={{fontSize:22,fontWeight:700,color:C.txt}}>{d.credit_offer.interest_rate_percent}%</div><div style={{fontSize:10,color:C.mut}}>p.a.</div></div>
+            <div style={{padding:12,background:C.bg,borderRadius:8,gridColumn:"1/-1"}}><div style={{fontSize:10,color:C.dim,marginBottom:4}}>Rate Tier</div><div style={{fontSize:13,fontWeight:600,color:C.txt}}>{d.credit_offer.interest_rate_tier}</div></div>
+            <div style={{padding:12,background:C.bg,borderRadius:8}}><div style={{fontSize:10,color:C.dim}}>Tenures</div><div style={{fontSize:14,fontWeight:600,fontFamily:mono,color:C.txt}}>{d.credit_offer.tenure_options_months.join(", ")}m</div></div>
+            <div style={{padding:12,background:C.bg,borderRadius:8}}><div style={{fontSize:10,color:C.dim}}>Est. EMI</div><div style={{fontSize:14,fontWeight:600,fontFamily:mono,color:C.txt}}>₹{d.credit_offer.monthly_emi_estimate?.toLocaleString()}</div></div></div>}
+          {d.insurance_offer&&mode==="GrabInsurance"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div style={{padding:12,background:C.bg,borderRadius:8}}><div style={{fontSize:10,color:C.dim}}>Coverage</div><div style={{fontSize:22,fontWeight:700,color:C.ins}}>₹{d.insurance_offer.coverage_amount_lakhs}L</div></div>
+            <div style={{padding:12,background:C.bg,borderRadius:8}}><div style={{fontSize:10,color:C.dim}}>Premium</div><div style={{fontSize:22,fontWeight:700,color:C.txt}}>₹{d.insurance_offer.annual_premium_inr?.toLocaleString()}</div></div>
+            <div style={{padding:12,background:C.bg,borderRadius:8,gridColumn:"1/-1"}}><div style={{fontSize:10,color:C.dim,marginBottom:4}}>Policy</div><div style={{fontSize:13,fontWeight:600,color:C.txt}}>{d.insurance_offer.policy_type}</div></div>
+            <div style={{padding:12,background:C.bg,borderRadius:8,gridColumn:"1/-1"}}><div style={{fontSize:10,color:C.dim,marginBottom:4}}>Details</div><div style={{fontSize:12,color:C.mut,lineHeight:1.5}}>{d.insurance_offer.coverage_details}</div></div></div>}
+          {d.rejection_reasons&&<div style={{padding:14,background:`${C.bad}08`,border:`1px solid ${C.bad}20`,borderRadius:8}}><div style={{fontSize:11,fontWeight:600,color:C.bad,marginBottom:8}}>REJECTION REASONS</div>{d.rejection_reasons.map((r,i)=><div key={i} style={{fontSize:12,color:C.txt,marginBottom:4,paddingLeft:12,borderLeft:`2px solid ${C.bad}40`}}>{r}</div>)}</div>}
+          {!d.credit_offer&&!d.insurance_offer&&!d.rejection_reasons&&<div style={{color:C.dim,fontSize:13,textAlign:"center",padding:20}}>No offer for this mode</div>}
+        </div>:<div style={{color:C.dim,fontSize:13,padding:"40px 0",textAlign:"center"}}>Run underwriting to generate offer</div>}</div>
+    </div>
+    {d&&<div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:16}}>
+      <div style={crd}><div style={{fontSize:12,fontWeight:600,color:C.mut,marginBottom:12}}>UNDERWRITING RATIONALE</div><div style={{fontSize:13.5,lineHeight:1.7,color:C.txt}}>{d.rationale}</div></div>
+      <div style={crd}><div style={{fontSize:12,fontWeight:600,color:C.mut,marginBottom:12}}>KEY FACTORS</div>{d.key_factors?.map((f,i)=><div key={i} style={{fontSize:12,color:C.txt,padding:"8px 12px",marginBottom:6,background:C.bg,borderRadius:6,borderLeft:`3px solid ${tc(d.risk_score.risk_tier)}`}}>{f}</div>)}</div>
+    </div>}
+  </div>;
+}
+
+function AuditTrail({entries}){
+  if(!entries.length)return <div style={{...crd,textAlign:"center",padding:60}}><div style={{fontSize:32,marginBottom:12}}>📋</div><div style={{color:C.mut}}>No audit entries yet.</div></div>;
+  return <div style={crd}><div style={{fontSize:12,fontWeight:600,color:C.mut,marginBottom:16}}>AUDIT TRAIL — {entries.length} entries</div>
+    <div style={{maxHeight:600,overflowY:"auto"}}>{entries.slice().reverse().map((e,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"180px 110px 200px 1fr",gap:12,padding:"10px 0",borderBottom:`1px solid ${C.bdr}`,fontSize:12,alignItems:"center"}}>
+      <span style={{fontFamily:mono,color:C.dim,fontSize:10}}>{new Date(e.timestamp).toLocaleString()}</span>
+      <span style={{fontFamily:mono,color:C.acc,fontSize:11}}>{e.merchant_id}</span>
+      <Badge color={e.action.includes("run")?C.ok:e.action.includes("whatsapp")?C.t1:e.action.includes("nach")||e.action.includes("accepted")?C.warn:C.mut}>{e.action}</Badge>
+      <span style={{color:C.mut,fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.mode&&<span style={{marginRight:8}}>[{e.mode}]</span>}{e.details&&Object.keys(e.details).length>0&&Object.entries(e.details).slice(0,3).map(([k,v])=>`${k}: ${typeof v==="object"?JSON.stringify(v):v}`).join(" · ")}</span>
+    </div>)}</div></div>;
+}
+
+function App(){
+  const [merchants,setM]=useState([]),[summary,setS]=useState(null),[audit,setA]=useState([]),[sel,setSel]=useState(null),[tab,setTab]=useState("merchants"),[mode,setMode]=useState("GrabCredit"),[loading,setL]=useState({}),[toast,setT]=useState({message:"",type:""}),[online,setO]=useState(null),[batch,setB]=useState(false);
+  const show=(msg,type="info")=>setT({message:msg,type});
+  const fetchAll=useCallback(async()=>{try{const[mD,sD,aD]=await Promise.all([apiFetch("/merchants"),apiFetch("/dashboard/summary"),apiFetch("/audit-log?limit=200")]);setM(mD.merchants);setS(sD);setA(aD.entries);setO(true);}catch{setO(false);}},[]);
+  useEffect(()=>{fetchAll();},[fetchAll]);
+
+  const runUW=async mid=>{const k=`uw_${mid}_${mode}`;setL(p=>({...p,[k]:true}));try{await apiFetch(`/underwrite/${mid}`,{method:"POST",body:JSON.stringify({mode,use_claude:true})});show("Underwriting complete","success");fetchAll();}catch(e){show(e.message,"error");}setL(p=>({...p,[k]:false}));};
+  const runBatch=async()=>{setB(true);try{const d=await apiFetch("/underwrite-all",{method:"POST",body:JSON.stringify({mode,use_claude:true})});show(`Batch: ${d.summary.total_processed} processed`,"success");fetchAll();}catch(e){show(e.message,"error");}setB(false);};
+  const sendWA=async mid=>{const k=`wa_${mid}`;setL(p=>({...p,[k]:true}));try{const d=await apiFetch(`/whatsapp/send/${mid}`,{method:"POST",body:JSON.stringify({mode})});const st=d.twilio_status||d.delivery_result?.status||"simulated";show(st==="sent"||st==="queued"?"WhatsApp sent!":"Message formatted (Twilio not configured)",st==="sent"||st==="queued"?"success":"info");fetchAll();}catch(e){show(e.message,"error");}setL(p=>({...p,[k]:false}));};
+  const accept=async mid=>{const k=`accept_${mid}`;setL(p=>({...p,[k]:true}));try{const d=await apiFetch(`/offer/accept/${mid}`,{method:"POST",body:JSON.stringify({mode,bank_account_last4:"4832"})});show(`NACH mandate ${d.nach_mandate.mandate_id} initiated`,"success");fetchAll();}catch(e){show(e.message,"error");}setL(p=>({...p,[k]:false}));};
+
+  if(online===false)return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:C.bg}}><div style={{...crd,maxWidth:500,textAlign:"center",padding:40}}><div style={{fontSize:48,marginBottom:16}}>⚡</div><h2 style={{color:C.txt,fontSize:20,marginBottom:12}}>Server Not Reachable</h2><p style={{color:C.mut,fontSize:14,lineHeight:1.6,marginBottom:24}}>Start the FastAPI server:</p><code style={{display:"block",background:C.bg,border:`1px solid ${C.bdr}`,borderRadius:8,padding:"14px 20px",fontFamily:mono,fontSize:13,color:C.t1,marginBottom:24,textAlign:"left",whiteSpace:"pre"}}>{"$ pip install -r requirements.txt\n$ cp .env.example .env\n$ python server.py"}</code><Btn onClick={()=>{setO(null);fetchAll();}}>Retry Connection</Btn></div></div>;
+
+  return <div style={{minHeight:"100vh",background:C.bg,color:C.txt}}>
+    <header style={{background:C.sf,borderBottom:`1px solid ${C.bdr}`,padding:"0 32px",height:64,display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
+      <div style={{display:"flex",alignItems:"center",gap:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:32,height:32,borderRadius:8,background:`linear-gradient(135deg,${C.cred},${C.ins})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:"#fff"}}>G</div><span style={{fontSize:16,fontWeight:700,letterSpacing:"-0.02em"}}>GrabOn Underwriting</span></div>
+        <div style={{height:24,width:1,background:C.bdr}}/>
+        <div style={{display:"flex",gap:2,background:C.bg,borderRadius:8,padding:2}}>{["GrabCredit","GrabInsurance"].map(m=><button key={m} onClick={()=>setMode(m)} style={{padding:"6px 14px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:mode===m?(m==="GrabCredit"?C.cred:C.ins):"transparent",color:mode===m?"#fff":C.mut,transition:"all 0.15s",fontFamily:"'DM Sans',system-ui"}}>{m==="GrabCredit"?"💰 Credit":"🛡️ Insurance"}</button>)}</div>
+      </div>
+      <div style={{display:"flex",gap:8}}><Btn variant="ghost" small onClick={fetchAll}>↻ Refresh</Btn><Btn small loading={batch} onClick={runBatch}>▶ Run All ({mode==="GrabCredit"?"Credit":"Insurance"})</Btn></div>
+    </header>
+    <div style={{background:C.sf,borderBottom:`1px solid ${C.bdr}`,padding:"0 32px",display:"flex"}}>{[{k:"merchants",l:"◉ Merchants"},{k:"audit",l:"◎ Audit Trail"}].map(t=><button key={t.k} onClick={()=>{setTab(t.k);setSel(null);}} style={{padding:"12px 20px",border:"none",cursor:"pointer",fontSize:13,fontWeight:500,color:tab===t.k?C.txt:C.mut,background:"transparent",borderBottom:`2px solid ${tab===t.k?C.acc:"transparent"}`,fontFamily:"'DM Sans',system-ui"}}>{t.l}</button>)}</div>
+    <div style={{padding:"24px 32px",maxWidth:1400,margin:"0 auto"}}>
+      {summary&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:24}}>{[["Merchants",summary.total_merchants,C.txt],["T1 / T2 / T3",`${summary.tier_distribution?.["Tier 1"]||0} / ${summary.tier_distribution?.["Tier 2"]||0} / ${summary.tier_distribution?.["Tier 3"]||0}`,C.t1],["Rejected",summary.tier_distribution?.Rejected||0,C.bad],["Credit",`₹${summary.total_credit_deployed_lakhs}L`,C.cred],["Coverage",`₹${summary.total_insurance_coverage_lakhs}L`,C.ins],["NACH",summary.nach_mandates_active||0,C.ok]].map(([l,v,c],i)=><div key={i} style={{...crd,padding:"16px 20px"}}><Stat label={l} value={v} color={c}/></div>)}</div>}
+
+      {tab==="merchants"&&!sel&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(380px,1fr))",gap:16}}>{merchants.map(m=>{
+        const d=getD(m,mode),tier=d?d.risk_score.risk_tier:(m.credit?m.credit.risk_tier:"Unknown"),score=d?d.risk_score.weighted_total:(m.credit?m.credit.weighted_score:0),flags=d?d.risk_score.flags:(m.credit?m.credit.flags:[]);
+        return <div key={m.merchant_id} onClick={()=>setSel(m)} style={{...crd,cursor:"pointer",position:"relative",overflow:"hidden"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=C.bdrA;e.currentTarget.style.boxShadow="0 4px 24px rgba(0,0,0,0.3)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor=C.bdr;e.currentTarget.style.boxShadow="none";}}>
+          <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:tc(tier)}}/>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}><div><div style={{fontSize:15,fontWeight:700,marginBottom:4}}>{m.merchant_name}</div><div style={{fontSize:12,color:C.mut}}>{m.merchant_id} · {m.category}</div></div><TierBadge tier={tier}/></div>
+          <div style={{display:"flex",gap:24,marginBottom:16}}><Stat label="Avg GMV" value={`₹${m.avg_monthly_gmv}L`}/><Stat label="Growth" value={m.gmv_growth_rate!=null?`${(m.gmv_growth_rate*100).toFixed(1)}%`:"N/A"} color={m.gmv_growth_rate>0?C.t1:m.gmv_growth_rate<0?C.t3:C.mut}/><Stat label="Score" value={score} color={tc(tier)}/></div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><StatusBadge status={d?.offer_status}/><div style={{display:"flex",gap:6}}>{(flags||[]).map((f,i)=><span key={i} style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:`${C.t3}15`,color:C.t3,fontFamily:mono,fontWeight:600}}>{f}</span>)}</div></div>
+        </div>;})}</div>}
+
+      {tab==="merchants"&&sel&&<Detail m={sel} mode={mode} loading={loading} onBack={()=>setSel(null)} onUW={()=>runUW(sel.merchant_id)} onWA={()=>sendWA(sel.merchant_id)} onAccept={()=>accept(sel.merchant_id)}/>}
+      {tab==="audit"&&<AuditTrail entries={audit}/>}
+    </div>
+    <Toast message={toast.message} type={toast.type} onClose={()=>setT({message:"",type:""})}/>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
