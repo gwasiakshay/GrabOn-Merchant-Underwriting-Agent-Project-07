@@ -10,7 +10,7 @@ An AI-powered underwriting agent that assesses GrabOn's merchant partners for tw
 
 **Dashboard:** `http://localhost:8000` after starting the server.
 
-**Loom Walkthrough:** _(link to be added)_
+**Loom Walkthrough:** (https://www.loom.com/share/fdadbfff6a994954ab5db54e8ed5bd0a)
 
 ---
 
